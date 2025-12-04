@@ -13,7 +13,6 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'cronos_transactions',
   NOTIFICATIONS: 'cronos_notifications',
   CURRENT_USER: 'cronos_session',
-  // REMOVED: AUTH_CODES
 };
 
 // Seeder
@@ -150,7 +149,7 @@ const filterByContext = <T>(data: T[], user: User): T[] => {
 export const StorageService = {
   // Syncs Firebase user with Local Storage User
   // If email not found in local storage, creates a new user.
-  syncFirebaseUser: async (email: string | null): Promise<User | null> => {
+  syncFirebaseUser: async (email: string | null, role: any = 'MASTER_ADMIN'): Promise<User | null> => {
     if (!email) return null;
     await delay();
     let users = getItem<User>(STORAGE_KEYS.USERS);
@@ -162,7 +161,7 @@ export const StorageService = {
         id: Math.random().toString(36).substr(2, 9),
         name: email.split('@')[0],
         email: email,
-        role: 'MASTER_ADMIN', // Default role for new signups
+        role: role, // Use selected role
       };
       users.push(user);
       setItem(STORAGE_KEYS.USERS, users);

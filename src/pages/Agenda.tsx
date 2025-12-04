@@ -25,7 +25,8 @@ export const Agenda: React.FC = () => {
   // Form State
   const [formData, setFormData] = useState<Partial<Appointment>>({
     date: format(new Date(), 'yyyy-MM-dd'),
-    status: 'PENDING'
+    status: 'PENDING',
+    notes: ''
   });
   
   // Custom Fields State
@@ -93,7 +94,8 @@ export const Agenda: React.FC = () => {
       startTime: selectedSlot,
       endTime,
       status: 'PENDING',
-      customFieldValues: customFieldValues
+      customFieldValues: customFieldValues,
+      notes: formData.notes
     };
 
     await StorageService.create(StorageService.KEYS.APPOINTMENTS, newAppt);
@@ -104,6 +106,7 @@ export const Agenda: React.FC = () => {
     setIsModalOpen(false);
     setCustomFieldValues({});
     setSelectedSlot(null);
+    setFormData({ date: format(new Date(), 'yyyy-MM-dd'), status: 'PENDING', notes: '' });
     fetchData();
   };
 
@@ -288,6 +291,12 @@ export const Agenda: React.FC = () => {
                         <p className="text-xs text-slate-500">{service?.name}</p>
                         <p className="text-xs text-slate-400 mb-2">Prof: {prof?.name}</p>
                         
+                        {appt.notes && (
+                            <div className="bg-yellow-50 p-2 rounded text-xs text-yellow-800 mb-2 border border-yellow-100">
+                                <strong>Nota:</strong> {appt.notes}
+                            </div>
+                        )}
+                        
                         <div className="flex gap-2 pt-2 border-t border-slate-200">
                           {appt.status !== 'COMPLETED' && appt.status !== 'CANCELLED' && (
                              <>
@@ -317,6 +326,7 @@ export const Agenda: React.FC = () => {
                  <div>
                     <p className="font-medium text-slate-900">{format(new Date(a.date), 'dd/MM/yyyy')} - {a.startTime}</p>
                     <p className="text-sm text-slate-500">{clients.find(c => c.id === a.clientId)?.name} - {services.find(s => s.id === a.serviceId)?.name}</p>
+                    {a.notes && <p className="text-xs text-slate-400 mt-1">Obs: {a.notes}</p>}
                  </div>
                  <Badge color="gray">{a.status}</Badge>
                </div>
@@ -388,6 +398,16 @@ export const Agenda: React.FC = () => {
                )}
             </div>
           )}
+
+          <div className="w-full">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Notas / Observações</label>
+            <textarea 
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors text-slate-900 h-20 resize-none"
+              value={formData.notes || ''}
+              onChange={e => setFormData({...formData, notes: e.target.value})}
+              placeholder="Observações sobre o agendamento..."
+            />
+          </div>
           
           {renderCustomFields()}
 
