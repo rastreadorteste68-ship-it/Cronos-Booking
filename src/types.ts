@@ -53,21 +53,22 @@ export interface Client {
   createdAt: string;
 }
 
+export interface TimeInterval {
+  start: string; // "08:00"
+  end: string;   // "12:00"
+}
+
 export interface AvailabilityException {
   date: string; // YYYY-MM-DD
   active: boolean; // Is the professional working this day?
-  start?: string;
-  end?: string;
+  intervals?: TimeInterval[]; // Overrides weekly intervals if active
   reason?: string;
 }
 
 export interface AvailabilityRule {
   dayOfWeek: number; // 0-6 (Sun-Sat)
-  start: string; // "08:00"
-  end: string; // "18:00"
-  breakStart?: string; // "12:00"
-  breakEnd?: string; // "13:00"
   active: boolean;
+  intervals: TimeInterval[]; // Support for multiple slots (Morning, Afternoon, Night)
 }
 
 export interface Professional {

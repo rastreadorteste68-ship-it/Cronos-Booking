@@ -79,13 +79,21 @@ const seedData = () => {
     { 
       id: 'p1', companyId: 'comp1', name: 'Carlos Silva', email: 'carlos@barbearia.com', specialty: 'Barbeiro', 
       slotInterval: 45,
-      availability: Array.from({ length: 7 }, (_, i) => ({ dayOfWeek: i, start: '09:00', end: '18:00', breakStart: '12:00', breakEnd: '13:00', active: i !== 0 })),
+      availability: Array.from({ length: 7 }, (_, i) => ({ 
+        dayOfWeek: i, 
+        active: i !== 0,
+        intervals: i !== 0 ? [{ start: '09:00', end: '12:00' }, { start: '13:00', end: '18:00' }] : []
+      })),
       exceptions: []
     },
     { 
       id: 'p2', companyId: 'comp2', name: 'Ana Souza', email: 'ana@consultoria.com', specialty: 'Estrategista', 
       slotInterval: 60,
-      availability: Array.from({ length: 7 }, (_, i) => ({ dayOfWeek: i, start: '10:00', end: '16:00', active: i >= 1 && i <= 5 })),
+      availability: Array.from({ length: 7 }, (_, i) => ({ 
+        dayOfWeek: i, 
+        active: i >= 1 && i <= 5,
+        intervals: [{ start: '10:00', end: '16:00' }]
+      })),
       exceptions: []
     }
   ];
