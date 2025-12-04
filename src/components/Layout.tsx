@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../services/authContext';
 import { 
   Calendar, Users, Briefcase, Settings, DollarSign, 
-  LogOut, Menu, X, Mic2, LayoutDashboard 
+  LogOut, Menu, X, Mic2, LayoutDashboard, Building2, Sliders
 } from 'lucide-react';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -13,12 +13,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   const navItems = [
     { label: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['MASTER_ADMIN', 'EMPRESA_ADMIN'] },
+    { label: 'Empresas', path: '/empresas', icon: Building2, roles: ['MASTER_ADMIN'] },
     { label: 'Agenda', path: '/agenda', icon: Calendar, roles: ['MASTER_ADMIN', 'EMPRESA_ADMIN', 'CLIENTE'] },
     { label: 'Clientes', path: '/clientes', icon: Users, roles: ['MASTER_ADMIN', 'EMPRESA_ADMIN'] },
     { label: 'Profissionais', path: '/profissionais', icon: Briefcase, roles: ['MASTER_ADMIN', 'EMPRESA_ADMIN'] },
-    { label: 'Serviços', path: '/servicos', icon: Settings, roles: ['MASTER_ADMIN', 'EMPRESA_ADMIN'] },
+    { label: 'Serviços', path: '/servicos', icon: Sliders, roles: ['MASTER_ADMIN', 'EMPRESA_ADMIN'] },
     { label: 'Eventos', path: '/eventos', icon: Mic2, roles: ['MASTER_ADMIN', 'EMPRESA_ADMIN'] },
     { label: 'Financeiro', path: '/financeiro', icon: DollarSign, roles: ['MASTER_ADMIN', 'EMPRESA_ADMIN'] },
+    { label: 'Configurações', path: '/configuracoes', icon: Settings, roles: ['EMPRESA_ADMIN'] },
   ];
 
   const filteredNav = navItems.filter(item => user && item.roles.includes(user.role));

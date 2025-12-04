@@ -1,7 +1,42 @@
 export type Role = 'MASTER_ADMIN' | 'EMPRESA_ADMIN' | 'CLIENTE';
 
+export interface NotificationSettings {
+  provider: 'MOCK' | 'WHATSAPP_CLOUD' | 'Z_API' | 'ULTRAMSG';
+  apiKey: string;
+  instanceId?: string; // For Z-API/UltraMsg
+  phoneFrom?: string; // For Cloud API
+  templates: {
+    appointmentCreated: string;
+    appointmentReminder: string;
+    appointmentCancelled: string;
+    paymentLink: string;
+    eventInvite: string;
+  };
+  active: boolean;
+}
+
+export interface NotificationLog {
+  id: string;
+  companyId: string;
+  date: string;
+  to: string;
+  message: string;
+  trigger: string;
+  status: 'SENT' | 'FAILED';
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  plan: 'FREE' | 'PRO' | 'ENTERPRISE';
+  active: boolean;
+  createdAt: string;
+  notificationSettings?: NotificationSettings;
+}
+
 export interface User {
   id: string;
+  companyId?: string; // Optional for Master Admin
   name: string;
   email: string;
   role: Role;
@@ -10,6 +45,7 @@ export interface User {
 
 export interface Client {
   id: string;
+  companyId: string;
   name: string;
   email: string;
   phone: string;
@@ -17,41 +53,56 @@ export interface Client {
   createdAt: string;
 }
 
-export interface Professional {
-  id: string;
-  name: string;
-  email: string;
-  specialty: string;
-  availability: AvailabilityRule[];
+export interface AvailabilityException {
+  date: string; // YYYY-MM-DD
+  active: boolean; // Is the professional working this day?
+  start?: string;
+  end?: string;
+  reason?: string;
 }
 
 export interface AvailabilityRule {
   dayOfWeek: number; // 0-6 (Sun-Sat)
   start: string; // "08:00"
   end: string; // "18:00"
+  breakStart?: string; // "12:00"
+  breakEnd?: string; // "13:00"
   active: boolean;
+}
+
+export interface Professional {
+  id: string;
+  companyId: string;
+  name: string;
+  email: string;
+  specialty: string;
+  availability: AvailabilityRule[];
+  exceptions?: AvailabilityException[];
+  slotInterval?: number; // Minutes, e.g., 30, 45, 60
 }
 
 export interface CustomField {
   id: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'checkbox';
+  type: 'text' | 'longText' | 'number' | 'email' | 'phone' | 'select' | 'checkbox' | 'upload' | 'signature';
   options?: string[]; // For select
   required: boolean;
 }
 
 export interface Service {
   id: string;
+  companyId: string;
   name: string;
   durationMinutes: number;
   price: number;
   customFields?: CustomField[];
 }
 
-export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'EN_ROUTE' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
 export interface Appointment {
   id: string;
+  companyId: string;
   clientId: string;
   professionalId: string;
   serviceId: string;
@@ -65,6 +116,7 @@ export interface Appointment {
 
 export interface Event {
   id: string;
+  companyId: string;
   title: string;
   date: string;
   time: string;
@@ -73,15 +125,19 @@ export interface Event {
   enrolledIds: string[]; // Client IDs
   meetingLink?: string;
   description?: string;
+  durationMinutes?: number;
 }
 
 export interface Transaction {
   id: string;
+  companyId: string;
   date: string;
   amount: number;
   type: 'INCOME' | 'EXPENSE';
   description: string;
   status: 'PENDING' | 'PAID';
   category: string;
+  paymentMethod?: 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'BOLETO';
+  providerId?: string; // MercadoPago ID, etc.
   referenceId?: string; // Appointment ID or Event ID
 }

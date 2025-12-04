@@ -3,8 +3,10 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMont
 import { ptBR } from 'date-fns/locale';
 import { Appointment, Client, Professional, Service } from '../types';
 import { StorageService } from '../services/storage';
+import { NotificationService } from '../services/notification';
+import { SchedulerService } from '../services/scheduler';
 import { Button, Modal, Input, Select, Badge, Card } from '../components/UI';
-import { ChevronLeft, ChevronRight, Plus, Clock, User, Check, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, User, Check, X, MapPin } from 'lucide-react';
 import { useAuth } from '../services/authContext';
 
 export const Agenda: React.FC = () => {
@@ -23,13 +25,38 @@ export const Agenda: React.FC = () => {
   // Form State
   const [formData, setFormData] = useState<Partial<Appointment>>({
     date: format(new Date(), 'yyyy-MM-dd'),
-    startTime: '09:00',
     status: 'PENDING'
   });
+  
+  // Custom Fields State
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
+  
+  // Slot Picker State
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+
+  // Payment Checkout
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentData, setPaymentData] = useState<{ appt: Appointment | null, method: string }>({ appt: null, method: 'PIX' });
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Effect to load slots when dependencies change
+  useEffect(() => {
+    if (formData.date && formData.professionalId && formData.serviceId) {
+      const dayOfWeek = new Date(formData.date).getUTCDay(); // fix timezone later, using simple date
+      const prof = professionals.find(p => p.id === formData.professionalId);
+      if (prof) {
+         // Generate slots based on professional availability and existing appointments
+         const dayAppts = appointments.filter(a => a.professionalId === prof.id && a.date === formData.date);
+         const slots = SchedulerService.generateSlots(formData.date, prof, dayAppts);
+         setAvailableSlots(slots);
+         setSelectedSlot(null); 
+      }
+    }
+  }, [formData.date, formData.professionalId, formData.serviceId, professionals, appointments]);
 
   const fetchData = async () => {
     const [a, c, p, s] = await Promise.all([
@@ -45,47 +72,118 @@ export const Agenda: React.FC = () => {
   };
 
   const handleCreate = async () => {
-    if (!formData.clientId || !formData.serviceId || !formData.professionalId) return;
+    if (!formData.clientId || !formData.serviceId || !formData.professionalId || !selectedSlot) return;
     
     // Calculate End Time
     const service = services.find(s => s.id === formData.serviceId);
     if (!service) return;
     
-    const [hours, minutes] = formData.startTime!.split(':').map(Number);
+    const [hours, minutes] = selectedSlot.split(':').map(Number);
     const endDate = new Date();
     endDate.setHours(hours, minutes + service.durationMinutes);
     const endTime = format(endDate, 'HH:mm');
 
     const newAppt: Appointment = {
       id: Math.random().toString(36).substr(2, 9),
-      ...formData as any,
+      companyId: user?.companyId || '',
+      clientId: formData.clientId,
+      professionalId: formData.professionalId,
+      serviceId: formData.serviceId,
+      date: formData.date!,
+      startTime: selectedSlot,
       endTime,
+      status: 'PENDING',
+      customFieldValues: customFieldValues
     };
 
     await StorageService.create(StorageService.KEYS.APPOINTMENTS, newAppt);
+    
+    // Trigger Notification
+    await NotificationService.notifyAppointmentCreated(newAppt);
+
     setIsModalOpen(false);
+    setCustomFieldValues({});
+    setSelectedSlot(null);
     fetchData();
   };
 
   const updateStatus = async (appt: Appointment, status: Appointment['status']) => {
-    await StorageService.update(StorageService.KEYS.APPOINTMENTS, { ...appt, status });
-    // If completed/paid, create transaction logic could go here
     if (status === 'COMPLETED') {
-       const service = services.find(s => s.id === appt.serviceId);
-       if(service) {
-         await StorageService.create(StorageService.KEYS.TRANSACTIONS, {
-            id: Math.random().toString(),
-            date: new Date().toISOString(),
-            amount: service.price,
-            type: 'INCOME',
-            category: 'Serviço',
-            description: `Serviço: ${service.name}`,
-            status: 'PAID',
-            referenceId: appt.id
-         });
-       }
+      // Open payment modal instead of just completing
+      setPaymentData({ appt, method: 'PIX' });
+      setIsPaymentModalOpen(true);
+      return;
     }
+
+    if (status === 'CANCELLED') {
+       if (confirm('Deseja realmente cancelar? O cliente será notificado.')) {
+          await StorageService.update(StorageService.KEYS.APPOINTMENTS, { ...appt, status });
+          await NotificationService.notifyAppointmentCancelled(appt);
+          fetchData();
+       }
+       return;
+    }
+
+    await StorageService.update(StorageService.KEYS.APPOINTMENTS, { ...appt, status });
     fetchData();
+  };
+
+  const finalizePayment = async () => {
+    if (!paymentData.appt) return;
+    
+    const service = services.find(s => s.id === paymentData.appt!.serviceId);
+    if (service) {
+      await StorageService.create(StorageService.KEYS.TRANSACTIONS, {
+         id: Math.random().toString(),
+         companyId: user?.companyId || '',
+         date: new Date().toISOString(),
+         amount: service.price,
+         type: 'INCOME',
+         category: 'Serviço',
+         description: `Serviço: ${service.name}`,
+         status: 'PAID',
+         referenceId: paymentData.appt.id,
+         paymentMethod: paymentData.method as any
+      });
+      
+      await StorageService.update(StorageService.KEYS.APPOINTMENTS, { ...paymentData.appt, status: 'COMPLETED' });
+      setIsPaymentModalOpen(false);
+      fetchData();
+    }
+  };
+
+  // Helper to render custom fields input
+  const renderCustomFields = () => {
+    if (!formData.serviceId) return null;
+    const service = services.find(s => s.id === formData.serviceId);
+    if (!service || !service.customFields || service.customFields.length === 0) return null;
+
+    return (
+      <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 space-y-3">
+        <h4 className="text-sm font-semibold text-slate-700">Informações Adicionais</h4>
+        {service.customFields.map(field => (
+          <div key={field.id}>
+             {field.type === 'select' ? (
+               <Select 
+                 label={field.label}
+                 value={customFieldValues[field.id] || ''}
+                 onChange={e => setCustomFieldValues({...customFieldValues, [field.id]: e.target.value})}
+               >
+                 <option value="">Selecione...</option>
+                 {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+               </Select>
+             ) : (
+               <Input 
+                 type={field.type === 'number' ? 'number' : 'text'}
+                 label={field.label}
+                 value={customFieldValues[field.id] || ''}
+                 onChange={e => setCustomFieldValues({...customFieldValues, [field.id]: e.target.value})}
+               />
+             )}
+          </div>
+        ))}
+      </div>
+    )
   };
 
   const daysInMonth = eachDayOfInterval({
@@ -118,7 +216,7 @@ export const Agenda: React.FC = () => {
       </div>
 
       {view === 'month' ? (
-        <div className="flex-1 flex gap-6 overflow-hidden">
+        <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden">
           {/* Calendar Grid */}
           <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-y-auto">
             <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 sticky top-0 z-10">
@@ -164,7 +262,7 @@ export const Agenda: React.FC = () => {
 
           {/* Side Drawer for Details */}
           {selectedDay && (
-            <div className="w-80 bg-white border border-slate-200 rounded-xl shadow-lg flex flex-col animate-in slide-in-from-right duration-200">
+            <div className="w-full md:w-80 bg-white border border-slate-200 rounded-xl shadow-lg flex flex-col animate-in slide-in-from-right duration-200">
               <div className="p-4 border-b border-slate-100 flex justify-between items-center">
                 <h3 className="font-semibold text-slate-800 capitalize">{format(selectedDay, 'EEEE, d MMMM', { locale: ptBR })}</h3>
                 <button onClick={() => setSelectedDay(null)}><X size={18} className="text-slate-400" /></button>
@@ -175,6 +273,7 @@ export const Agenda: React.FC = () => {
                 ) : getDayAppointments(selectedDay).map(appt => {
                     const client = clients.find(c => c.id === appt.clientId);
                     const service = services.find(s => s.id === appt.serviceId);
+                    const prof = professionals.find(p => p.id === appt.professionalId);
                     return (
                       <div key={appt.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 group">
                         <div className="flex justify-between items-start mb-2">
@@ -186,17 +285,22 @@ export const Agenda: React.FC = () => {
                           <span className="text-xs font-bold text-slate-500">{appt.startTime} - {appt.endTime}</span>
                         </div>
                         <p className="font-medium text-slate-900">{client?.name}</p>
-                        <p className="text-xs text-slate-500 mb-2">{service?.name}</p>
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {appt.status === 'PENDING' && (
-                            <>
-                              <button onClick={() => updateStatus(appt, 'CONFIRMED')} className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200"><Check size={14} /></button>
-                              <button onClick={() => updateStatus(appt, 'CANCELLED')} className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200"><X size={14} /></button>
-                            </>
+                        <p className="text-xs text-slate-500">{service?.name}</p>
+                        <p className="text-xs text-slate-400 mb-2">Prof: {prof?.name}</p>
+                        
+                        <div className="flex gap-2 pt-2 border-t border-slate-200">
+                          {appt.status !== 'COMPLETED' && appt.status !== 'CANCELLED' && (
+                             <>
+                               {appt.status === 'PENDING' && (
+                                 <button onClick={() => updateStatus(appt, 'CONFIRMED')} className="flex-1 text-xs bg-green-100 text-green-700 py-1.5 rounded hover:bg-green-200">Confirmar</button>
+                               )}
+                               {appt.status === 'CONFIRMED' && (
+                                  <button onClick={() => updateStatus(appt, 'EN_ROUTE')} className="flex-1 text-xs bg-indigo-100 text-indigo-700 py-1.5 rounded hover:bg-indigo-200 flex items-center justify-center gap-1"><MapPin size={10} /> A Caminho</button>
+                               )}
+                               <button onClick={() => updateStatus(appt, 'COMPLETED')} className="flex-1 text-xs bg-blue-100 text-blue-700 py-1.5 rounded hover:bg-blue-200">Pagar/Concluir</button>
+                               <button onClick={() => updateStatus(appt, 'CANCELLED')} className="p-1.5 text-red-400 hover:text-red-600 rounded"><X size={14} /></button>
+                             </>
                           )}
-                           {appt.status === 'CONFIRMED' && (
-                             <button onClick={() => updateStatus(appt, 'COMPLETED')} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Concluir</button>
-                           )}
                         </div>
                       </div>
                     )
@@ -221,22 +325,9 @@ export const Agenda: React.FC = () => {
         </Card>
       )}
 
+      {/* CREATE APPOINTMENT MODAL */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Novo Agendamento">
-        <div className="space-y-4">
-          <Input 
-            type="date" 
-            label="Data" 
-            value={formData.date} 
-            onChange={e => setFormData({...formData, date: e.target.value})} 
-          />
-          <div className="grid grid-cols-2 gap-4">
-             <Input 
-              type="time" 
-              label="Horário Início" 
-              value={formData.startTime} 
-              onChange={e => setFormData({...formData, startTime: e.target.value})} 
-            />
-          </div>
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
           
           <Select 
             label="Cliente" 
@@ -264,9 +355,68 @@ export const Agenda: React.FC = () => {
             <option value="">Selecione...</option>
             {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </Select>
+
+          <Input 
+            type="date" 
+            label="Data" 
+            value={formData.date} 
+            onChange={e => setFormData({...formData, date: e.target.value})} 
+          />
+
+          {/* Smart Slot Picker */}
+          {formData.professionalId && formData.date && (
+            <div className="space-y-2">
+               <label className="text-sm font-medium text-slate-700">Horários Disponíveis</label>
+               {availableSlots.length > 0 ? (
+                 <div className="grid grid-cols-4 gap-2">
+                   {availableSlots.map(slot => (
+                     <button
+                       key={slot}
+                       onClick={() => setSelectedSlot(slot)}
+                       className={`text-xs py-2 px-1 rounded border transition-all ${
+                         selectedSlot === slot 
+                           ? 'bg-indigo-600 text-white border-indigo-600' 
+                           : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-400'
+                       }`}
+                     >
+                       {slot}
+                     </button>
+                   ))}
+                 </div>
+               ) : (
+                 <p className="text-sm text-red-500">Sem horários para este dia/profissional.</p>
+               )}
+            </div>
+          )}
           
-          <Button onClick={handleCreate} className="w-full mt-4">Confirmar Agendamento</Button>
+          {renderCustomFields()}
+
+          <Button onClick={handleCreate} className="w-full mt-4" disabled={!selectedSlot}>
+             Confirmar Agendamento
+          </Button>
         </div>
+      </Modal>
+
+      {/* PAYMENT MODAL */}
+      <Modal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} title="Checkout e Pagamento">
+         <div className="space-y-4">
+            <p className="text-slate-600">Confirme o recebimento para concluir o serviço.</p>
+            <div className="bg-slate-50 p-4 rounded text-center">
+               <span className="text-2xl font-bold text-slate-900">
+                 R$ {services.find(s => s.id === paymentData.appt?.serviceId)?.price.toFixed(2)}
+               </span>
+            </div>
+            
+            <Select label="Forma de Pagamento" value={paymentData.method} onChange={e => setPaymentData({...paymentData, method: e.target.value})}>
+               <option value="PIX">Pix</option>
+               <option value="CREDIT_CARD">Cartão de Crédito</option>
+               <option value="DEBIT_CARD">Cartão de Débito</option>
+               <option value="CASH">Dinheiro</option>
+               <option value="BOLETO">Boleto</option>
+            </Select>
+
+            <Button onClick={finalizePayment} className="w-full">Confirmar Pagamento</Button>
+         </div>
       </Modal>
     </div>
   );

@@ -1,8 +1,9 @@
-import { User, Client, Professional, Service, Appointment, Event, Transaction } from '../types';
+import { User, Client, Professional, Service, Appointment, Event, Transaction, Company, NotificationLog } from '../types';
 
-const DELAY_MS = 600;
+const DELAY_MS = 400;
 
 const STORAGE_KEYS = {
+  COMPANIES: 'cronos_companies',
   USERS: 'cronos_users',
   CLIENTS: 'cronos_clients',
   PROFESSIONALS: 'cronos_professionals',
@@ -10,6 +11,7 @@ const STORAGE_KEYS = {
   APPOINTMENTS: 'cronos_appointments',
   EVENTS: 'cronos_events',
   TRANSACTIONS: 'cronos_transactions',
+  NOTIFICATIONS: 'cronos_notifications',
   CURRENT_USER: 'cronos_session'
 };
 
@@ -17,45 +19,94 @@ const STORAGE_KEYS = {
 const seedData = () => {
   if (localStorage.getItem(STORAGE_KEYS.USERS)) return;
 
+  const defaultTemplates = {
+    appointmentCreated: "Olá {client_name}, seu agendamento de {service_name} foi confirmado para {date} às {time} com {professional_name}.📍",
+    appointmentReminder: "Lembrete: Você tem um horário de {service_name} hoje às {time}. Confirma?",
+    appointmentCancelled: "Olá {client_name}, seu agendamento para {date} foi cancelado. Entre em contato para reagendar.",
+    paymentLink: "Olá, segue o link de pagamento para seu serviço: {link}",
+    eventInvite: "Você foi inscrito no evento {event_title} dia {date}. Link: {link}"
+  };
+
+  const companies: Company[] = [
+    { 
+      id: 'comp1', 
+      name: 'Barbearia Vintage', 
+      plan: 'PRO', 
+      active: true, 
+      createdAt: new Date().toISOString(),
+      notificationSettings: {
+        provider: 'MOCK',
+        apiKey: 'sk_test_123',
+        active: true,
+        templates: defaultTemplates
+      }
+    },
+    { 
+      id: 'comp2', 
+      name: 'Consultoria Tech', 
+      plan: 'ENTERPRISE', 
+      active: true, 
+      createdAt: new Date().toISOString(),
+      notificationSettings: {
+        provider: 'WHATSAPP_CLOUD',
+        apiKey: '',
+        active: false,
+        templates: defaultTemplates
+      }
+    }
+  ];
+
   const users: User[] = [
     { id: '1', name: 'Master Admin', email: 'master@cronos.com', role: 'MASTER_ADMIN' },
-    { id: '2', name: 'Admin Empresa', email: 'admin@empresa.com', role: 'EMPRESA_ADMIN' },
-    { id: '3', name: 'João Cliente', email: 'joao@cliente.com', role: 'CLIENTE' }
+    { id: '2', companyId: 'comp1', name: 'Admin Barbearia', email: 'admin@barbearia.com', role: 'EMPRESA_ADMIN' },
+    { id: '3', companyId: 'comp2', name: 'Admin Consultoria', email: 'admin@consultoria.com', role: 'EMPRESA_ADMIN' },
+    { id: '4', companyId: 'comp1', name: 'João Cliente', email: 'joao@cliente.com', role: 'CLIENTE' }
   ];
 
   const services: Service[] = [
-    { id: 's1', name: 'Corte de Cabelo', durationMinutes: 45, price: 50, customFields: [] },
-    { id: 's2', name: 'Consultoria Financeira', durationMinutes: 60, price: 200, customFields: [{ id: 'cf1', label: 'Tamanho Empresa', type: 'select', options: ['Pequena', 'Média', 'Grande'], required: true }] }
+    { 
+      id: 's1', companyId: 'comp1', name: 'Corte Clássico', durationMinutes: 45, price: 50, 
+      customFields: [
+         { id: 'cf1', label: 'Estilo preferido', type: 'text', required: false },
+         { id: 'cf2', label: 'Bebida de cortesia', type: 'select', options: ['Água', 'Café', 'Cerveja'], required: true }
+      ] 
+    },
+    { 
+      id: 's2', companyId: 'comp2', name: 'Mentoria Startup', durationMinutes: 60, price: 350, customFields: [] }
   ];
 
   const professionals: Professional[] = [
     { 
-      id: 'p1', name: 'Carlos Silva', email: 'carlos@cronos.com', specialty: 'Barbeiro', 
-      availability: Array.from({ length: 7 }, (_, i) => ({ dayOfWeek: i, start: '09:00', end: '18:00', active: i !== 0 })) 
+      id: 'p1', companyId: 'comp1', name: 'Carlos Silva', email: 'carlos@barbearia.com', specialty: 'Barbeiro', 
+      slotInterval: 45,
+      availability: Array.from({ length: 7 }, (_, i) => ({ dayOfWeek: i, start: '09:00', end: '18:00', breakStart: '12:00', breakEnd: '13:00', active: i !== 0 })),
+      exceptions: []
     },
     { 
-      id: 'p2', name: 'Ana Souza', email: 'ana@cronos.com', specialty: 'Consultora', 
-      availability: Array.from({ length: 7 }, (_, i) => ({ dayOfWeek: i, start: '10:00', end: '16:00', active: i >= 1 && i <= 5 })) 
+      id: 'p2', companyId: 'comp2', name: 'Ana Souza', email: 'ana@consultoria.com', specialty: 'Estrategista', 
+      slotInterval: 60,
+      availability: Array.from({ length: 7 }, (_, i) => ({ dayOfWeek: i, start: '10:00', end: '16:00', active: i >= 1 && i <= 5 })),
+      exceptions: []
     }
   ];
 
   const clients: Client[] = [
-    { id: 'c1', name: 'João Cliente', email: 'joao@cliente.com', phone: '5511999999999', createdAt: new Date().toISOString() },
-    { id: 'c2', name: 'Maria Oliveira', email: 'maria@cliente.com', phone: '5511988888888', createdAt: new Date().toISOString() }
+    { id: 'c1', companyId: 'comp1', name: 'João Cliente', email: 'joao@cliente.com', phone: '5511999999999', createdAt: new Date().toISOString() },
+    { id: 'c2', companyId: 'comp2', name: 'Maria CEO', email: 'maria@ceo.com', phone: '5511988888888', createdAt: new Date().toISOString() }
   ];
 
   const appointments: Appointment[] = [
     { 
-      id: 'a1', clientId: 'c1', professionalId: 'p1', serviceId: 's1', 
+      id: 'a1', companyId: 'comp1', clientId: 'c1', professionalId: 'p1', serviceId: 's1', 
       date: new Date().toISOString().split('T')[0], startTime: '10:00', endTime: '10:45', status: 'CONFIRMED' 
     }
   ];
 
   const transactions: Transaction[] = [
-    { id: 't1', date: new Date().toISOString(), amount: 50, type: 'INCOME', category: 'Serviço', description: 'Corte de Cabelo - João', status: 'PAID', referenceId: 'a1' },
-    { id: 't2', date: new Date().toISOString(), amount: 1500, type: 'EXPENSE', category: 'Aluguel', description: 'Aluguel Sala', status: 'PAID' }
+    { id: 't1', companyId: 'comp1', date: new Date().toISOString(), amount: 50, type: 'INCOME', category: 'Serviço', description: 'Corte - João', status: 'PAID', referenceId: 'a1', paymentMethod: 'PIX' }
   ];
 
+  localStorage.setItem(STORAGE_KEYS.COMPANIES, JSON.stringify(companies));
   localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
   localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
   localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(professionals));
@@ -63,11 +114,11 @@ const seedData = () => {
   localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(appointments));
   localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
   localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify([]));
+  localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify([]));
 };
 
 seedData();
 
-// Generic Helper
 const delay = () => new Promise(resolve => setTimeout(resolve, DELAY_MS));
 
 function getItem<T>(key: string): T[] {
@@ -79,8 +130,15 @@ function setItem<T>(key: string, data: T[]) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
+// Helper to filter data based on user context
+const filterByContext = <T>(data: T[], user: User): T[] => {
+  if (user.role === 'MASTER_ADMIN') return data;
+  if (!user.companyId) return [];
+  // Handle items that might not have companyId (unlikely in this design but safe to check)
+  return data.filter(item => (item as any).companyId === user.companyId);
+};
+
 export const StorageService = {
-  // Auth
   login: async (email: string): Promise<User | null> => {
     await delay();
     const users = getItem<User>(STORAGE_KEYS.USERS);
@@ -101,14 +159,30 @@ export const StorageService = {
     return u ? JSON.parse(u) : null;
   },
 
-  // Generic CRUD
-  getAll: async <T>(key: string): Promise<T[]> => {
+  getAll: async <T = any>(key: string): Promise<T[]> => {
     await delay();
-    return getItem<T>(key);
+    const allItems = getItem<T>(key);
+    const currentUser = StorageService.getCurrentUser();
+    if (!currentUser) return [];
+    return filterByContext(allItems, currentUser);
+  },
+
+  getById: async <T = any>(key: string, id: string): Promise<T | undefined> => {
+    await delay();
+    const items = getItem<T & { id: string }>(key);
+    return items.find(i => i.id === id);
   },
 
   create: async <T extends { id: string }>(key: string, item: T): Promise<T> => {
     await delay();
+    const currentUser = StorageService.getCurrentUser();
+    if (!currentUser) throw new Error("Unauthorized");
+
+    // Automatically assign companyId if user is not Master (or if they are Admin of a company)
+    if (currentUser.role !== 'MASTER_ADMIN' && currentUser.companyId) {
+      (item as any).companyId = currentUser.companyId;
+    }
+
     const items = getItem<T>(key);
     items.push(item);
     setItem(key, items);
@@ -133,10 +207,15 @@ export const StorageService = {
     setItem(key, filtered);
   },
 
-  // Specific Logic
   getAppointments: async (): Promise<Appointment[]> => {
-    await delay();
-    return getItem<Appointment>(STORAGE_KEYS.APPOINTMENTS);
+    return StorageService.getAll<Appointment>(STORAGE_KEYS.APPOINTMENTS);
+  },
+
+  getCompanySettings: async (): Promise<Company | undefined> => {
+    const user = StorageService.getCurrentUser();
+    if (!user || !user.companyId) return undefined;
+    const companies = getItem<Company>(STORAGE_KEYS.COMPANIES);
+    return companies.find(c => c.id === user.companyId);
   },
   
   KEYS: STORAGE_KEYS
