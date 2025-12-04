@@ -267,7 +267,10 @@ export const ProfessionalsPage: React.FC = () => {
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {professionals.map(p => (
-          <Card key={p.id} className="hover:shadow-lg hover:scale-[1.02] transition-all duration-300 relative group cursor-pointer border border-slate-200">
+          <Card 
+            key={p.id} 
+            className="relative group cursor-pointer border border-slate-200 transition-all duration-300 hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1"
+          >
              <button 
                onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} 
                className="absolute top-4 right-4 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all z-10"
