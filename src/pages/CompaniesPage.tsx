@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StorageService } from '../services/storage';
-import { Company } from '../types';
+import { Company, User } from '../types';
 import { Button, Card, Input, Modal, Select, Badge } from '../components/UI';
 import { Plus, Edit2, Trash2, Building2 } from 'lucide-react';
 
@@ -23,11 +23,33 @@ export const CompaniesPage: React.FC = () => {
     if (formData.id) {
       await StorageService.update(StorageService.KEYS.COMPANIES, formData as Company);
     } else {
-      await StorageService.create(StorageService.KEYS.COMPANIES, { 
+      // 1. Create the Company
+      const newCompanyId = Math.random().toString(36).substr(2, 9);
+      const newCompany: Company = { 
         ...formData, 
-        id: Math.random().toString(36).substr(2, 9),
+        id: newCompanyId,
         createdAt: new Date().toISOString() 
-      } as Company);
+      } as Company;
+      
+      await StorageService.create(StorageService.KEYS.COMPANIES, newCompany);
+
+      // 2. Auto-create a Default Admin User for this company (so it appears on Login screen)
+      const cleanName = formData.name?.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'empresa';
+      const defaultUser: User = {
+        id: Math.random().toString(36).substr(2, 9),
+        companyId: newCompanyId,
+        name: `Admin ${formData.name}`,
+        email: `admin@${cleanName}.com`,
+        role: 'EMPRESA_ADMIN'
+      };
+      
+      // We use direct localStorage access or a specialized method because StorageService.create might rely on current user context
+      // but here we are master admin creating another user.
+      const users = await StorageService.getAll<User>(StorageService.KEYS.USERS);
+      users.push(defaultUser);
+      localStorage.setItem(StorageService.KEYS.USERS, JSON.stringify(users));
+
+      alert(`Empresa criada! Usuário gerado: ${defaultUser.email}`);
     }
     setIsModalOpen(false);
     load();
@@ -113,7 +135,9 @@ export const CompaniesPage: React.FC = () => {
             <label htmlFor="active" className="text-sm font-medium text-slate-700">Empresa Ativa</label>
           </div>
 
-          <Button onClick={handleSave} className="w-full mt-4">Salvar</Button>
+          <Button onClick={handleSave} className="w-full mt-4">
+             {formData.id ? 'Salvar Alterações' : 'Criar Empresa (+ Usuário Admin)'}
+          </Button>
         </div>
       </Modal>
     </div>

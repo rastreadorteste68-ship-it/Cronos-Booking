@@ -4,7 +4,8 @@ import { StorageService } from './storage';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string) => Promise<boolean>;
+  sendCode: (email: string) => Promise<string>;
+  verifyCode: (email: string, code: string) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -21,12 +22,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string) => {
+  const sendCode = async (email: string) => {
     setIsLoading(true);
-    const foundUser = await StorageService.login(email);
-    setUser(foundUser);
+    const code = await StorageService.requestMagicCode(email);
     setIsLoading(false);
-    return !!foundUser;
+    return code;
+  };
+
+  const verifyCode = async (email: string, code: string) => {
+    setIsLoading(true);
+    const foundUser = await StorageService.verifyMagicCode(email, code);
+    if (foundUser) {
+       setUser(foundUser);
+       setIsLoading(false);
+       return true;
+    }
+    setIsLoading(false);
+    return false;
   };
 
   const logout = () => {
@@ -35,7 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, sendCode, verifyCode, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

@@ -17,10 +17,16 @@ export const FinancePage: React.FC = () => {
   const expense = transactions.filter(t => t.type === 'EXPENSE').reduce((acc, c) => acc + c.amount, 0);
   const balance = income - expense;
 
-  const data = [
+  const rawData = [
     { name: 'Entradas', value: income, color: '#10b981' },
     { name: 'Saídas', value: expense, color: '#ef4444' }
   ];
+
+  // Handle empty state to avoid chart errors or invisible charts
+  const hasData = income > 0 || expense > 0;
+  const chartData = hasData 
+    ? rawData 
+    : [{ name: 'Sem dados', value: 1, color: '#e2e8f0' }];
 
   const exportCSV = () => {
     const headers = "ID,Data,Tipo,Valor,Categoria,Status\n";
@@ -66,21 +72,29 @@ export const FinancePage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card title="Distribuição" className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={data} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <RechartsTooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+        <Card title="Distribuição">
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie 
+                  data={chartData} 
+                  innerRadius={60} 
+                  outerRadius={80} 
+                  paddingAngle={hasData ? 5 : 0} 
+                  dataKey="value"
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                {hasData && <RechartsTooltip />}
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </Card>
 
-        <Card title="Últimas Transações" className="lg:col-span-2 h-[300px] overflow-y-auto">
+        <Card title="Últimas Transações" className="lg:col-span-2 h-[350px] overflow-y-auto">
           <div className="space-y-3">
             {transactions.map(t => (
               <div key={t.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
@@ -96,6 +110,9 @@ export const FinancePage: React.FC = () => {
                 </div>
               </div>
             ))}
+            {transactions.length === 0 && (
+              <p className="text-center text-slate-400 py-8">Nenhuma transação registrada.</p>
+            )}
           </div>
         </Card>
       </div>

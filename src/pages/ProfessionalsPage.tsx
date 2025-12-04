@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { StorageService } from '../services/storage';
-import { Professional, TimeInterval } from '../types';
-import { Button, Card, Badge, Modal, Input } from '../components/UI';
-import { Edit2, Plus, Trash2, Clock, Calendar as CalendarIcon, X, User, Mail, Briefcase } from 'lucide-react';
+import { useAuth } from '../services/authContext';
+import { Professional, TimeInterval, Company } from '../types';
+import { Button, Card, Badge, Modal, Input, Select } from '../components/UI';
+import { Edit2, Plus, Trash2, Clock, Calendar as CalendarIcon, X, User, Mail, Briefcase, Building2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export const ProfessionalsPage: React.FC = () => {
+  const { user } = useAuth();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [editingProf, setEditingProf] = useState<Professional | null>(null);
   const [activeTab, setActiveTab] = useState<'weekly' | 'exceptions'>('weekly');
   
@@ -18,12 +21,17 @@ export const ProfessionalsPage: React.FC = () => {
     load();
   }, []);
 
-  const load = async () => setProfessionals(await StorageService.getAll(StorageService.KEYS.PROFESSIONALS));
+  const load = async () => {
+    setProfessionals(await StorageService.getAll(StorageService.KEYS.PROFESSIONALS));
+    if (user?.role === 'MASTER_ADMIN') {
+       setCompanies(await StorageService.getAll(StorageService.KEYS.COMPANIES));
+    }
+  };
 
   const handleAddNew = () => {
     setEditingProf({
       id: '', // Empty ID marks it as new
-      companyId: '',
+      companyId: user?.companyId || '', // Default to current user's company, or empty if Master
       name: '',
       email: '',
       specialty: '',
@@ -44,6 +52,12 @@ export const ProfessionalsPage: React.FC = () => {
         alert('O nome é obrigatório.');
         return;
       }
+      
+      // Validation for Master Admin
+      if (user?.role === 'MASTER_ADMIN' && !editingProf.companyId) {
+        alert('Selecione uma empresa para vincular o profissional.');
+        return;
+      }
 
       if (editingProf.id) {
         // Update existing
@@ -52,6 +66,8 @@ export const ProfessionalsPage: React.FC = () => {
         // Create new
         const newProf = { 
           ...editingProf, 
+          // If user is not Master, companyId is already set in handleAddNew or forced by backend
+          companyId: user?.role === 'MASTER_ADMIN' ? editingProf.companyId : (user?.companyId || ''),
           id: Math.random().toString(36).substr(2, 9) 
         };
         await StorageService.create(StorageService.KEYS.PROFESSIONALS, newProf);
@@ -269,6 +285,9 @@ export const ProfessionalsPage: React.FC = () => {
                     <Badge color="indigo">{p.specialty}</Badge>
                     <span className="text-xs text-slate-400 flex items-center gap-1"><Clock size={10} /> {p.slotInterval || 60}min</span>
                   </div>
+                  {user?.role === 'MASTER_ADMIN' && (
+                     <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Building2 size={10} /> Emp: {p.companyId}</p>
+                  )}
                 </div>
               </div>
               <Button variant="secondary" onClick={() => setEditingProf(p)} className="gap-2 mr-6">
@@ -302,6 +321,19 @@ export const ProfessionalsPage: React.FC = () => {
           {/* Basic Info Inputs */}
           {editingProf && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+               {user?.role === 'MASTER_ADMIN' && (
+                 <div className="md:col-span-2">
+                   <Select 
+                     label="Empresa Vinculada"
+                     value={editingProf.companyId}
+                     onChange={e => setEditingProf({...editingProf, companyId: e.target.value})}
+                   >
+                     <option value="">Selecione a empresa...</option>
+                     {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                   </Select>
+                 </div>
+               )}
+
                <div className="md:col-span-2">
                  <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1 mb-1"><User size={12}/> Nome Completo</label>
                  <Input 
