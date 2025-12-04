@@ -13,7 +13,7 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'cronos_transactions',
   NOTIFICATIONS: 'cronos_notifications',
   CURRENT_USER: 'cronos_session',
-  AUTH_CODES: 'cronos_auth_codes' // New key for magic codes
+  // REMOVED: AUTH_CODES
 };
 
 // Seeder
@@ -124,7 +124,6 @@ const seedData = () => {
   localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
   localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify([]));
   localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify([]));
-  localStorage.setItem(STORAGE_KEYS.AUTH_CODES, JSON.stringify({}));
 };
 
 seedData();
@@ -149,53 +148,29 @@ const filterByContext = <T>(data: T[], user: User): T[] => {
 };
 
 export const StorageService = {
-  // NEW: Magic Link Flow
-  requestMagicCode: async (email: string): Promise<string> => {
+  // Syncs Firebase user with Local Storage User
+  // If email not found in local storage, creates a new user.
+  syncFirebaseUser: async (email: string | null): Promise<User | null> => {
+    if (!email) return null;
     await delay();
     let users = getItem<User>(STORAGE_KEYS.USERS);
     let user = users.find(u => u.email === email);
 
-    // AUTO REGISTER Logic
     if (!user) {
-      console.log("User not found, auto-registering:", email);
+      console.log("Firebase user not found locally, auto-registering:", email);
       user = {
         id: Math.random().toString(36).substr(2, 9),
         name: email.split('@')[0],
         email: email,
-        role: 'MASTER_ADMIN', // Default new users to Master for demo purposes
+        role: 'MASTER_ADMIN', // Default role for new signups
       };
       users.push(user);
       setItem(STORAGE_KEYS.USERS, users);
     }
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
     
-    // Store code
-    const codes = JSON.parse(localStorage.getItem(STORAGE_KEYS.AUTH_CODES) || '{}');
-    codes[email] = code;
-    localStorage.setItem(STORAGE_KEYS.AUTH_CODES, JSON.stringify(codes));
-
-    return code;
-  },
-
-  verifyMagicCode: async (email: string, code: string): Promise<User | null> => {
-    await delay();
-    const codes = JSON.parse(localStorage.getItem(STORAGE_KEYS.AUTH_CODES) || '{}');
-    
-    if (codes[email] === code) {
-       // Code matches
-       delete codes[email]; // clear code
-       localStorage.setItem(STORAGE_KEYS.AUTH_CODES, JSON.stringify(codes));
-
-       // Log user in
-       const users = getItem<User>(STORAGE_KEYS.USERS);
-       const user = users.find(u => u.email === email);
-       if (user) {
-         localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
-         return user;
-       }
-    }
-    return null;
+    // Set current session
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+    return user;
   },
 
   logout: async () => {

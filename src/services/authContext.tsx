@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { StorageService } from './storage';
+import { AuthService } from '../lib/authService';
+import { auth } from '../lib/firebaseClient';
 
 interface AuthContextType {
   user: User | null;
-  sendCode: (email: string) => Promise<string>;
-  verifyCode: (email: string, code: string) => Promise<boolean>;
-  logout: () => void;
   isLoading: boolean;
+  sendLink: (email: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>(null!);
@@ -16,38 +17,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Initialize Auth State from Storage
   useEffect(() => {
     const stored = StorageService.getCurrentUser();
     if (stored) setUser(stored);
     setIsLoading(false);
   }, []);
 
-  const sendCode = async (email: string) => {
+  // Listen to Firebase Auth Changes
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser && firebaseUser.email) {
+        // Sync with local Storage (create profile if new)
+        const appUser = await StorageService.syncFirebaseUser(firebaseUser.email);
+        setUser(appUser);
+      } else {
+        // Logged out
+        if (!StorageService.getCurrentUser()) {
+          setUser(null);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const sendLink = async (email: string) => {
     setIsLoading(true);
-    const code = await StorageService.requestMagicCode(email);
+    await AuthService.sendMagicLink(email);
     setIsLoading(false);
-    return code;
   };
 
-  const verifyCode = async (email: string, code: string) => {
-    setIsLoading(true);
-    const foundUser = await StorageService.verifyMagicCode(email, code);
-    if (foundUser) {
-       setUser(foundUser);
-       setIsLoading(false);
-       return true;
-    }
-    setIsLoading(false);
-    return false;
-  };
-
-  const logout = () => {
+  const logout = async () => {
+    await auth.signOut();
     StorageService.logout();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, sendCode, verifyCode, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, isLoading, sendLink, logout }}>
       {children}
     </AuthContext.Provider>
   );
