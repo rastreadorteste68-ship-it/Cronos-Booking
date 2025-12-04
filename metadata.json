@@ -1,0 +1,5 @@
+{
+  "name": "Cronos Booking",
+  "description": "A complete SaaS scheduling and business management application featuring RBAC, dynamic agenda, finance tracking, and event management.",
+  "requestFramePermissions": []
+}
