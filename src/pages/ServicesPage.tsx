@@ -58,7 +58,7 @@ export const ServicesPage: React.FC = () => {
         <div className="space-y-4">
           <Input label="Nome" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Preço (R$)" type="number" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} />
+            <Input label="Price (R$)" type="number" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} />
             <Input label="Duração (min)" type="number" value={formData.durationMinutes} onChange={e => setFormData({...formData, durationMinutes: Number(e.target.value)})} />
           </div>
           <Button onClick={handleSave} className="w-full">Salvar</Button>
