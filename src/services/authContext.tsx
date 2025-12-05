@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, Role } from '../types';
 import { StorageService } from './storage';
-import { loginWithEmail, logout as firebaseLogout } from '../lib/authService';
+import { loginWithEmail, registerWithEmail, logout as firebaseLogout } from '../lib/authService';
 import { auth } from '../lib/firebaseClient';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, pass: string, role: Role) => Promise<void>;
+  login: (email: string, pass: string) => Promise<void>;
+  register: (name: string, email: string, pass: string, role: Role) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -28,9 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser && firebaseUser.email) {
-        // We might just be reloading the page, so sync.
-        // Note: Role passed here defaults to Master Admin if creating new via listener only,
-        // but 'login' function below handles explicit role creation.
+        // Sync on page reload or background auth change
         const appUser = await StorageService.syncFirebaseUser(firebaseUser.email);
         setUser(appUser);
       } else {
@@ -42,13 +41,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, pass: string, role: Role) => {
+  const login = async (email: string, pass: string) => {
     setIsLoading(true);
     try {
       const fbUser = await loginWithEmail(email, pass);
       if (fbUser && fbUser.email) {
-        const appUser = await StorageService.syncFirebaseUser(fbUser.email, role);
+        // Sync without forcing params (user should exist)
+        const appUser = await StorageService.syncFirebaseUser(fbUser.email);
         setUser(appUser);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const register = async (name: string, email: string, pass: string, role: Role) => {
+    setIsLoading(true);
+    try {
+      const fbUser = await registerWithEmail(email, pass, name);
+      if (fbUser && fbUser.email) {
+         // Create local profile with Name and Role
+         const appUser = await StorageService.syncFirebaseUser(fbUser.email, role, name);
+         setUser(appUser);
       }
     } finally {
       setIsLoading(false);
@@ -62,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

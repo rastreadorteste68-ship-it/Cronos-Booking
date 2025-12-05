@@ -1,4 +1,4 @@
-import { User, Client, Professional, Service, Appointment, Event, Transaction, Company, NotificationLog } from '../types';
+import { User, Client, Professional, Service, Appointment, Event, Transaction, Company, NotificationLog, Role } from '../types';
 
 const DELAY_MS = 400;
 
@@ -63,64 +63,13 @@ const seedData = () => {
     { id: '4', companyId: 'comp1', name: 'João Cliente', email: 'joao@cliente.com', role: 'CLIENTE' }
   ];
 
-  const services: Service[] = [
-    { 
-      id: 's1', companyId: 'comp1', name: 'Corte Clássico', durationMinutes: 45, price: 50, 
-      customFields: [
-         { id: 'cf1', label: 'Estilo preferido', type: 'text', required: false },
-         { id: 'cf2', label: 'Bebida de cortesia', type: 'select', options: ['Água', 'Café', 'Cerveja'], required: true }
-      ] 
-    },
-    { 
-      id: 's2', companyId: 'comp2', name: 'Mentoria Startup', durationMinutes: 60, price: 350, customFields: [] }
-  ];
-
-  const professionals: Professional[] = [
-    { 
-      id: 'p1', companyId: 'comp1', name: 'Carlos Silva', email: 'carlos@barbearia.com', specialty: 'Barbeiro', 
-      slotInterval: 45,
-      availability: Array.from({ length: 7 }, (_, i) => ({ 
-        dayOfWeek: i, 
-        active: i !== 0,
-        intervals: i !== 0 ? [{ start: '09:00', end: '12:00' }, { start: '13:00', end: '18:00' }] : []
-      })),
-      exceptions: []
-    },
-    { 
-      id: 'p2', companyId: 'comp2', name: 'Ana Souza', email: 'ana@consultoria.com', specialty: 'Estrategista', 
-      slotInterval: 60,
-      availability: Array.from({ length: 7 }, (_, i) => ({ 
-        dayOfWeek: i, 
-        active: i >= 1 && i <= 5,
-        intervals: [{ start: '10:00', end: '16:00' }]
-      })),
-      exceptions: []
-    }
-  ];
-
-  const clients: Client[] = [
-    { id: 'c1', companyId: 'comp1', name: 'João Cliente', email: 'joao@cliente.com', phone: '5511999999999', createdAt: new Date().toISOString() },
-    { id: 'c2', companyId: 'comp2', name: 'Maria CEO', email: 'maria@ceo.com', phone: '5511988888888', createdAt: new Date().toISOString() }
-  ];
-
-  const appointments: Appointment[] = [
-    { 
-      id: 'a1', companyId: 'comp1', clientId: 'c1', professionalId: 'p1', serviceId: 's1', 
-      date: new Date().toISOString().split('T')[0], startTime: '10:00', endTime: '10:45', status: 'CONFIRMED' 
-    }
-  ];
-
-  const transactions: Transaction[] = [
-    { id: 't1', companyId: 'comp1', date: new Date().toISOString(), amount: 50, type: 'INCOME', category: 'Serviço', description: 'Corte - João', status: 'PAID', referenceId: 'a1', paymentMethod: 'PIX' }
-  ];
-
   localStorage.setItem(STORAGE_KEYS.COMPANIES, JSON.stringify(companies));
   localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-  localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
-  localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify(professionals));
-  localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
-  localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify(appointments));
-  localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+  localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify([]));
+  localStorage.setItem(STORAGE_KEYS.PROFESSIONALS, JSON.stringify([]));
+  localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify([]));
+  localStorage.setItem(STORAGE_KEYS.APPOINTMENTS, JSON.stringify([]));
+  localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify([]));
   localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify([]));
   localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify([]));
 };
@@ -142,27 +91,46 @@ function setItem<T>(key: string, data: T[]) {
 const filterByContext = <T>(data: T[], user: User): T[] => {
   if (user.role === 'MASTER_ADMIN') return data;
   if (!user.companyId) return [];
-  // Handle items that might not have companyId (unlikely in this design but safe to check)
   return data.filter(item => (item as any).companyId === user.companyId);
 };
 
 export const StorageService = {
   // Syncs Firebase user with Local Storage User
-  // If email not found in local storage, creates a new user.
-  syncFirebaseUser: async (email: string | null, role: any = 'MASTER_ADMIN'): Promise<User | null> => {
+  // Accepts Name and Role to create the correct profile on first registration
+  syncFirebaseUser: async (email: string | null, role?: Role, name?: string): Promise<User | null> => {
     if (!email) return null;
     await delay();
     let users = getItem<User>(STORAGE_KEYS.USERS);
     let user = users.find(u => u.email === email);
 
     if (!user) {
-      console.log("Firebase user not found locally, auto-registering:", email);
+      console.log("Creating new local user profile for:", email);
       user = {
         id: Math.random().toString(36).substr(2, 9),
-        name: email.split('@')[0],
+        name: name || email.split('@')[0],
         email: email,
-        role: role, // Use selected role
+        role: role || 'CLIENTE', 
+        // Note: For a real SaaS, we would assign a new Company ID here if role is EMPRESA_ADMIN
       };
+      
+      if (user.role === 'EMPRESA_ADMIN') {
+         // Auto-create a company for this new admin? 
+         // For simplicity in this demo, let's leave companyId undefined or generate one if needed.
+         // In a real flow, registration would ask for Company Name too.
+         user.companyId = Math.random().toString(36).substr(2, 9);
+         
+         const newCompany: Company = {
+            id: user.companyId,
+            name: `Nova Empresa de ${user.name}`,
+            plan: 'FREE',
+            active: true,
+            createdAt: new Date().toISOString()
+         };
+         const companies = getItem<Company>(STORAGE_KEYS.COMPANIES);
+         companies.push(newCompany);
+         setItem(STORAGE_KEYS.COMPANIES, companies);
+      }
+
       users.push(user);
       setItem(STORAGE_KEYS.USERS, users);
     }
@@ -200,7 +168,6 @@ export const StorageService = {
     const currentUser = StorageService.getCurrentUser();
     if (!currentUser) throw new Error("Unauthorized");
 
-    // Automatically assign companyId if user is not Master (or if they are Admin of a company)
     if (currentUser.role !== 'MASTER_ADMIN' && currentUser.companyId) {
       (item as any).companyId = currentUser.companyId;
     }
