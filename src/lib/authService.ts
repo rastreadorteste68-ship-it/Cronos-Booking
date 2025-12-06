@@ -4,7 +4,9 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   isSignInWithEmailLink,
-  signInWithEmailLink
+  signInWithEmailLink,
+  sendPasswordResetEmail,
+  fetchSignInMethodsForEmail
 } from "firebase/auth";
 import { firebaseApp } from "./firebaseClient";
 
@@ -26,6 +28,21 @@ export async function registerWithEmail(email: string, password: string, name: s
   }
   
   return result.user;
+}
+
+export async function recoverPassword(email: string) {
+  await sendPasswordResetEmail(auth, email);
+}
+
+export async function checkEmailExists(email: string): Promise<boolean> {
+  try {
+    const methods = await fetchSignInMethodsForEmail(auth, email);
+    return methods.length > 0;
+  } catch (error: any) {
+    // Newer Firebase instances protect email enumeration and might throw error or return empty
+    // But createUserWithEmailAndPassword throws auth/email-already-in-use which we catch in the UI
+    return false;
+  }
 }
 
 export async function confirmMagicLogin() {
@@ -50,6 +67,8 @@ export function logout() {
 export const AuthService = {
   loginWithEmail,
   registerWithEmail,
+  recoverPassword,
+  checkEmailExists,
   confirmMagicLogin,
   logout
 };

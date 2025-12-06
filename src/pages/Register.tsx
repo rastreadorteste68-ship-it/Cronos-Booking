@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../services/authContext';
 import { Button, Input, Card } from '../components/UI';
-import { Command, ArrowLeft, Shield, Building2, User } from 'lucide-react';
+import { Command, ArrowLeft, Shield, Building2, User, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { Role } from '../types';
 import { Link, useNavigate } from 'react-router-dom';
+import { AuthService } from '../lib/authService';
 
 export const Register: React.FC = () => {
   const [step, setStep] = useState(1);
@@ -11,7 +12,13 @@ export const Register: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  
+  // Existing Email Logic
+  const [emailExists, setEmailExists] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
   const { register, isLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -27,19 +34,35 @@ export const Register: React.FC = () => {
         return;
     }
     setError('');
+    setEmailExists(false);
     
     try {
+      // 1. Check if email exists (Optional pre-check, but helpful for UX)
+      // Note: Firebase create() also throws 'auth/email-already-in-use', we handle both.
+      
       await register(name, email, password, role);
       navigate('/');
+      
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/email-already-in-use') {
-        setError('Este e-mail já está cadastrado.');
+        setEmailExists(true);
+        setError('Já existe uma conta cadastrada com este e-mail.');
       } else if (err.code === 'auth/weak-password') {
         setError('A senha deve ter pelo menos 6 caracteres.');
       } else {
         setError('Erro ao criar conta. Tente novamente.');
       }
+    }
+  };
+
+  const handleRecoverPassword = async () => {
+    try {
+      await AuthService.recoverPassword(email);
+      setResetSent(true);
+      setError('');
+    } catch (err) {
+      setError('Erro ao enviar e-mail de recuperação.');
     }
   };
 
@@ -103,6 +126,7 @@ export const Register: React.FC = () => {
                   placeholder="Seu nome"
                   required 
                   autoFocus
+                  disabled={emailExists}
                 />
 
                 <Input 
@@ -112,22 +136,61 @@ export const Register: React.FC = () => {
                   onChange={(e) => setEmail(e.target.value)} 
                   placeholder="seu@email.com"
                   required 
+                  disabled={emailExists}
                 />
                 
-                <Input 
-                  label="Senha" 
-                  type="password" 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)} 
-                  placeholder="Mínimo 6 caracteres"
-                  required 
-                />
+                <div className="relative">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Senha</label>
+                  <div className="relative">
+                    <input 
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors text-slate-900 pr-10 disabled:bg-slate-50 disabled:text-slate-400"
+                      type={showPassword ? "text" : "password"}
+                      value={password} 
+                      onChange={(e) => setPassword(e.target.value)} 
+                      placeholder="Mínimo 6 caracteres"
+                      required 
+                      disabled={emailExists}
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"
+                      disabled={emailExists}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
                 
-                {error && <p className="text-sm text-red-500 bg-red-50 p-2 rounded border border-red-100">{error}</p>}
+                {error && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-sm text-red-500 bg-red-50 p-2 rounded border border-red-100 flex items-center gap-2">
+                      <AlertCircle size={16} /> {error}
+                    </p>
+                    {emailExists && !resetSent && (
+                      <Button type="button" variant="secondary" onClick={handleRecoverPassword} className="w-full">
+                        Recuperar senha deste e-mail
+                      </Button>
+                    )}
+                    {resetSent && (
+                       <p className="text-sm text-green-600 bg-green-50 p-2 rounded border border-green-100 text-center">
+                         E-mail de redefinição enviado com sucesso!
+                       </p>
+                    )}
+                  </div>
+                )}
 
-                <Button type="submit" className="w-full justify-center" disabled={isLoading}>
-                    {isLoading ? 'Criando Conta...' : 'Cadastrar e Entrar'}
-                </Button>
+                {!emailExists && (
+                  <Button type="submit" className="w-full justify-center" disabled={isLoading}>
+                      {isLoading ? 'Criando Conta...' : 'Cadastrar e Entrar'}
+                  </Button>
+                )}
+                
+                {emailExists && (
+                   <Button type="button" onClick={() => { setEmailExists(false); setError(''); }} variant="ghost" className="w-full">
+                     Tentar outro e-mail
+                   </Button>
+                )}
             </form>
           </Card>
         )}
