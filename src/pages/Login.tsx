@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../services/authContext';
 import { Button, Input, Card, Modal } from '../components/UI';
-import { Command, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Command, Eye, EyeOff } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthService } from '../lib/authService';
 
@@ -76,13 +76,7 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative">
-      <div className="absolute top-4 left-4">
-         <Link to="/" className="text-slate-500 hover:text-indigo-600 flex items-center gap-1 font-medium text-sm">
-            <ArrowLeft size={16} /> Voltar ao início
-         </Link>
-      </div>
-
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-indigo-600 rounded-xl mx-auto flex items-center justify-center text-white mb-4 shadow-lg shadow-indigo-200">
@@ -157,9 +151,10 @@ export const Login: React.FC = () => {
             </form>
 
             <div className="mt-6 pt-4 border-t border-slate-100 text-center">
-              <Link to="/">
+              <p className="text-sm text-slate-600 mb-3">Não tem uma conta?</p>
+              <Link to="/register">
                  <Button variant="secondary" className="w-full justify-center" type="button">
-                    (INÍCIO)
+                    INICIO
                  </Button>
               </Link>
             </div>
